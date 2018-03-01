@@ -2,3 +2,5 @@ __pycache__
 .git
 testfile.py
 output_data
+_nt_comp.py
+_stop.py
