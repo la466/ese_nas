@@ -1,6 +1,17 @@
+import argparse
 import csv
 import multiprocessing
 import os
+
+#from NAS_analysis
+
+def create_directory(path):
+    '''
+    Create new directory if doesn't already exist
+    '''
+    if not os.path.exists(path):
+        os.mkdir(path)
+
 
 def list_to_dict(input_list, index1, index2, as_list = False, uniquify = False, floatify = False):
     '''
@@ -24,8 +35,31 @@ def list_to_dict(input_list, index1, index2, as_list = False, uniquify = False, 
         output_dict = {i: sorted(list(set(output_dict[i]))) for i in output_dict}
     return(output_dict)
 
+def parse_arguments(description, arguments, floats = None, flags = None, ints = None):
+    '''
+    Use argparse to parse a set of input arguments from the command line.
+    '''
+    if not floats:
+        floats = []
+    if not flags:
+        flags = []
+    if not ints:
+        ints = []
+    parser = argparse.ArgumentParser(description = description)
+    for pos, argument in enumerate(arguments):
+        if pos in flags:
+            parser.add_argument("--{0}".format(argument), action = "store_true", help = argument)
+        else:
+            if pos in floats:
+                curr_type = float
+            elif pos in ints:
+                curr_type = int
+            else:
+                curr_type = str
+            parser.add_argument(argument, type = curr_type, help = argument)
+    args = parser.parse_args()
+    return(args)
 
-#from RS
 def read_many_fields(input_file, delimiter):
     '''
     Read a csv/tsv/... into a list of lists with each sublist corresponding to one line.
@@ -96,3 +130,12 @@ def read_fasta(input_file):
         print("No sequences were extracted!")
         raise Exception
     return(names, sequences)
+
+def remove_file(file_name):
+    '''
+    Remove a file, if it exists.
+    '''
+    try:
+        os.remove(file_name)
+    except FileNotFoundError:
+        pass
