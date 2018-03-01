@@ -1,6 +1,8 @@
+import generic as gen
 import itertools as it
 import re
 import numpy as np
+import os
 
 def make_simulants(motifs, n_sim, output_file_name = None, retro = False, mono = False, no_duplicates = False, remove_stops = False, remove_existing = False, cap_runs = False, exclude = None, seed = None, concat = True):
     '''
@@ -102,11 +104,12 @@ def make_simulants(motifs, n_sim, output_file_name = None, retro = False, mono =
 
 
 
-motifs = ['TCGCCG', 'GCAAGA', 'CGTCGA', 'CGTCGC', 'TCGACG', 'GACGGA', 'TCGGCG']
-
 def get_dinucleotides(motifs, concat_motifs=None):
 
-	print(motifs)
+	'''
+	Generate a list of dinucleotides for a given set of motifs.
+	concat_motifs: join all motifs in string and then get dinucelotides.
+	'''
 
 	dinucleotides = []
 
@@ -131,30 +134,87 @@ def get_dinucleotides(motifs, concat_motifs=None):
 
 	return(dinucleotides)
 
-def generate_motifs(motifs, dinucleotides, seed):
-	# simulants = [["" for j in motifs] for i in range(1)]
-	# print(simulants)
+def generate_motifs(simulations, motifs, dinucleotides, seed=None):
 
-	#set the randomisation seed
-	if seed:
-		np.random.seed(seed)
-	else:
-		rp.random.seed()
+	'''
+	Generate a random set of motifs given a set of motifs.
+	Generate using a set of dinucleotides from the set of motifs.
+	'''
 
-	created_simulants = []
-	for i, motif in enumerate(motifs):
-		#get the number of required dints to create simulant
-		required_dinucleotides = len(motif) // 2
-		created = False
-		new_simulant = []
-		while not created:
-			#pick the number of required dinucleotides
-			new_simulant.extend(np.random.choice(dinucleotides, required_dinucleotides))
-			if new_simulant not in created_simulants:
-				created = True
-				created_simulants.append(new_simulant)
+	#create any empty set of motifs
+	simulant_set = []
+	#get a list of all the nucleotides in the set
+	motif_nts = list(it.chain(*motifs))
 
-	simulants = ["".join(i) for i in created_simulants]
-	return(simulants)
+	for i, simulation in enumerate(simulations):
+		#set the randomisation seed
+		if seed:
+			#chunk seeds based on processes
+			seed_chunks = [seed[i] for i in simulations]
+			np.random.seed(seed_chunks[i])
+		else:
+			np.random.seed()
 
-# create_simulated_motifs(motifs)
+		created_simulants = []
+		for i, motif in enumerate(motifs):
+			#detemine whether the motif is of odd length
+			if len(motif) % 2 == 0:
+				odd = False
+			else:
+				odd = True
+
+			#get the number of required dinucleotides to create simulant
+			required_dinucleotides = len(motif) // 2
+			created = False
+			new_simulant = []
+			while not created:
+				#pick the number of required dinucleotides
+				new_simulant.extend(np.random.choice(dinucleotides, required_dinucleotides))
+				#if odd length, add one random nt from the nt list
+				if odd:
+					new_simulant.extend(np.random.choice(motif_nts, 1))
+				#if the newly created simulant isnt in the set of simulated motifs, keep
+				if new_simulant not in created_simulants:
+					created = True
+					created_simulants.append(new_simulant)
+				else:
+					#otherwise reset new simulant
+					new_simulant = []
+		simulants = ["".join(i) for i in created_simulants]
+		simulant_set.append(simulants)
+	return(simulant_set)
+
+def generate_motifs_sets(motifs, simulations_to_run, output_file, seed_list=None, onebyone=None):
+
+	'''
+	Generate n sets of motifs based on the set of motifs provided.
+	seed_list: a list of seeds to use (must be of length greater or equal to the number of simulations)
+	'''
+
+	#check that there are enough seeds if the seed is set
+	if seed_list and simulations_to_run > len(seed_list):
+		print('The number of seeds must be at least equal to the number of simulations!')
+		raise Exception
+
+	#get dinucleotides
+	dinucleotides = get_dinucleotides(motifs)
+	#create a list of processes
+	input_list = [i for i in range(simulations_to_run)]
+	#build processes
+	processes = gen.run_in_parallel(input_list, ["foo", motifs, dinucleotides, seed_list], generate_motifs, onebyone)
+	#run processes and output to output_file
+	output = open(output_file, "w")
+	for process in processes:
+		simulants = process.get()
+		if simulants:
+			for simulant in simulants:
+				output.write('{0}\n'.format("|".join(simulant)))
+	output.close()
+
+def get_stop_codon_count(motifs):
+	'''
+	Get the number of stop codons in any frame in a list of motifs.
+	'''
+	stop_regex = re.compile('TAA|TAG|TGA')
+	stops = [len(re.findall(stop_regex, i)) for i in motifs]
+	return(sum(stops))
